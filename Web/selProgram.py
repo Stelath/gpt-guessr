@@ -11,6 +11,8 @@ from selenium.webdriver.common.action_chains import ActionChains
 import time    
 import sys
 
+from ai_backend import get_coords
+
 def run_test():
         driver = webdriver.Chrome()
 
@@ -93,13 +95,12 @@ def run_test():
                 .perform()
         driver.save_screenshot("Image3.png")
 
-        #send the images to the AI and receive the location estimates
+        coords = get_coords()
+        
+        # os.remove("Image.png")
+        # os.remove("Image2.png")
+        # os.remove("Image3.png")
 
-        os.remove("Image.png")
-        os.remove("Image2.png")
-        os.remove("Image3.png")
-
-        coords = [-45.284, 28.645]
         print(coords)
         return coords
 
