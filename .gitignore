@@ -265,3 +265,6 @@ dist
 .yarn/install-state.gz
 .pnp.*
 Web/guessr_052.pth
+
+
+*.bin
