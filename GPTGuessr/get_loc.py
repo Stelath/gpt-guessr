@@ -32,7 +32,7 @@ def get_data(minv, maxv, coords, key, world):
                 'heading': 90,
                 'pitch': '20',
                 'fov': '90',
-                'radius': 1000000
+                'radius': 1000100
                 }
 
             response = requests.get(url, params)
@@ -41,15 +41,17 @@ def get_data(minv, maxv, coords, key, world):
             else:
                 lat, lon = 0, 0
             
+            did = False
             for j, country in enumerate(world.geometry):
-                if country.contains(Point(lon, lat)):
+                buffer = country.buffer(0.4)
+                if Point(lon, lat).within(buffer):
                     save_file_names.append(file_name)
                     countries.append(j)
                     img_coords.append([lat, lon])
             
             i += 3
         
-        print(f"Image {i} Percent: {(i) / (maxv) * 100:.2f}%", end='\r')
+        print(f"Image {i} Percent: {(i) / (maxv - minv) * 100:.2f}%", end='\r')
         
     pd.DataFrame({'file_name': save_file_names, 'country': countries, 'coords': img_coords}).to_pickle(f'df_{minv}_{maxv}.df')
     # Save the coordinates to the output file
