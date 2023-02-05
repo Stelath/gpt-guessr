@@ -11,12 +11,17 @@ from selenium.webdriver.common.action_chains import ActionChains
 import time    
 import sys
 
+from selenium.webdriver.chrome.service import Service as ChromeService
+from webdriver_manager.chrome import ChromeDriverManager
+
+
 from ai_backend import get_coords
 
-def run_test():
-        driver = webdriver.Chrome()
+def run_test(url):
+        service = ChromeService(executable_path=ChromeDriverManager().install())
+        # service = ChromeService(executable_path='/usr/bin/chromedriver')
+        driver = webdriver.Chrome(service=service)
 
-        url = sys.argv[1]
         driver.get(url)
         WebDriverWait(driver, 10).until(EC.presence_of_element_located((By.CLASS_NAME, 'styles_root__3xbKq')))
 
@@ -62,7 +67,7 @@ def run_test():
         element.parentNode.removeChild(element);
         """, elem)
 
-        driver.save_screenshot("Image.png")
+        driver.save_screenshot("Image1.png")
         h = driver.find_element(By.TAG_NAME, "main")
         ActionChains(driver)\
                 .move_to_element(h)\
@@ -95,13 +100,16 @@ def run_test():
                 .perform()
         driver.save_screenshot("Image3.png")
 
+        for i in range(1, 4):
+            im = Image.open("Image" + str(i) + ".png")
+            im = im.crop((700, 0, 1700, 1000))
+            im.save("Image" + str(i) + ".png")
+
         coords = get_coords()
         
-        # os.remove("Image.png")
-        # os.remove("Image2.png")
-        # os.remove("Image3.png")
+        os.remove("Image1.png")
+        os.remove("Image2.png")
+        os.remove("Image3.png")
 
         print(coords)
         return coords
-
-run_test()

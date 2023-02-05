@@ -4,6 +4,8 @@ import json
 import requests
 import subprocess
 
+from selProgram import run_test
+
 app = Flask(__name__)
 CORS(app, origins=["http://localhost:8000/"])
 
@@ -15,9 +17,9 @@ def handle_request():
     request_text = request_data.get("request", "")
     print(request_text)
     # Run the Python script with the request text
-    output = subprocess.run(["py", "selProgram.py", request_text], capture_output=True, text=True)
+    output = run_test(request_text)
     print("After subprocess!")
-    response_data = { "response": output.stdout }
+    response_data = { "response": output }
     print(response_data)
     return json.dumps(response_data), 200
 

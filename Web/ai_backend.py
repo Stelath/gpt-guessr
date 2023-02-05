@@ -16,12 +16,14 @@ preprocess = transforms.Compose([
 
 model_config = GPTGuessrConfig(num_channels=9)
 model = GPTGuessr(model_config)
-model.load_state_dict(torch.load('guessr_052.pth')['model_state_dict'])
+# print(torch.load("guessr_006.pth/pytorch_model.bin", map_location=torch.device('cpu')).keys())
+model.load_state_dict(torch.load("guessr_034.pth/pytorch_model.bin", map_location=torch.device('cpu')))
 model.eval()
 
 def get_coords():
+    items = []
     for i in range(0, 3):
-        data_path = os.path.join(f'Image{i + 1}.png')
+        data_path = f'Image{i + 1}.png'
         img = Image.open(data_path)
         items.append(img.convert("RGB"))
     
@@ -32,6 +34,7 @@ def get_coords():
     
     pred_country, pred_coords = model(items)
     pred_coords = pred_coords.detach().numpy()[0]
+    pred_coords = [str(pred_coords[0]), str(pred_coords[1])]
     
     return pred_coords
     
