@@ -1,4 +1,5 @@
 import torch
+import torch.nn.functional as F
 from torch.utils.data import Dataset
 import torchvision.transforms as transforms
 import numpy as np
@@ -16,7 +17,10 @@ class GeoGuessrDataset(Dataset):
 
     def __getitem__(self, idx):
         items = []
-        file_path = self.df.iloc[idx]['file_path']
+        df_item = self.df.iloc[idx]
+        file_path = df_item['file_path']
+        country = df_item['country']
+        coords = df_item['coords']
         for i in range(0, 3):
             data_path = os.path.join(self.data_dir, f'{file_path}_{i}.jpg')
             items.append(Image.open(data_path))
@@ -27,7 +31,7 @@ class GeoGuessrDataset(Dataset):
         
         items = torch.stack(items)
         
-        item = {'image': items, 'country': 'label', 'coords': 'label'}
+        item = {'image': items, 'country': F.one_hot(torch.Tensor(country).long(), num_classes=177), 'coords': torch.Tensor(coords, dtype=torch.float32)}
         
         return item
     
