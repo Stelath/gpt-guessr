@@ -22,9 +22,9 @@ def get_args():
 
 args = get_args()
 url = 'https://maps.googleapis.com/maps/api/streetview'
+metadata_url = 'https://maps.googleapis.com/maps/api/streetview/metadata'
 
 def main():
-    
     print('Enter your Google Street View API Key: ')
     key = input()
     # Open and create all the necessary files & folders
@@ -57,6 +57,9 @@ def main():
             # Save the image to the output folder
             with open(os.path.join(args.output, filename), "wb") as file:
                 file.write(response.content)
+            
+            response = requests.get(url, params)
+            lat, lon = response.json()['location']['lat'], response.json()['location']['lng']
             
             # Save the coordinates to the output file
             csv_writer.writerow([filename, lat, lon])
