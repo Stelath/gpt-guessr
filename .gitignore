@@ -132,3 +132,5 @@ GPTGuessr/population/
 GPTGuessr/data/
 .DS_Store
 GPTGuessr/data.zip
+GPTGuessrModel/GPTGuessr/
+GPTGuessrModel/data/
