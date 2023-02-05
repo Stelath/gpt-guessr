@@ -58,7 +58,7 @@ def main():
                 file.write(response.content)
             
         response = requests.get(metadata_url, params)
-        if response.json()['status'] != "ZERO_RESULTS" and response.json()['status'] != "REQUEST_DENIED":
+        if response.json()['status'] != "UNKNOWN_ERROR" and response.json()['status'] != "ZERO_RESULTS" and response.json()['status'] != "REQUEST_DENIED":
             lat, lon = response.json()['location']['lat'], response.json()['location']['lng']
         else:
             lat, lon = 0, 0
