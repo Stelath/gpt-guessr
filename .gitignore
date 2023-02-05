@@ -129,3 +129,4 @@ dmypy.json
 .pyre/
 *.pbf
 GPTGuessr/population/
+GPTGuessr/data/
