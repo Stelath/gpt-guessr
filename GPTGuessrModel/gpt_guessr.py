@@ -4,6 +4,8 @@ import torch.nn as nn
 from transformers import AutoImageProcessor, ViTModel, ViTPreTrainedModel
 from transformers.configuration_utils import PretrainedConfig
 
+from typing import Optional
+
 class GPTGuessrConfig(PretrainedConfig):
     def __init__(
         self,
@@ -50,8 +52,8 @@ class GPTGuessr(ViTPreTrainedModel):
         self.vit = ViTModel(config, add_pooling_layer=False)
 
         # Classifier head
-        self.country_classifier = nn.Linear(config.hidden_size, config.num_countries) if config.num_labels > 0 else nn.Identity()
-        self.coordinates_classifier = nn.Linear(config.hidden_size + config.num_countries, 2) if config.num_labels > 0 else nn.Identity()
+        self.country_classifier = nn.Linear(config.hidden_size, config.num_countries)
+        self.coordinates_classifier = nn.Linear(config.hidden_size + config.num_countries, 2)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -65,8 +67,6 @@ class GPTGuessr(ViTPreTrainedModel):
         interpolate_pos_encoding: Optional[bool] = None,
     ) -> tuple:
         
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
         outputs = self.vit(
             pixel_values,
             head_mask=head_mask,
@@ -78,6 +78,6 @@ class GPTGuessr(ViTPreTrainedModel):
         sequence_output = outputs[0]
 
         country = self.country_classifier(sequence_output[:, 0, :])
-        coordinates = self.coordinates_classifier(torch.cat(country, sequence_output[:, 0, :]))
+        coordinates = self.coordinates_classifier(torch.cat((country, sequence_output[:, 0, :]), dim=1))
 
         return country, coordinates

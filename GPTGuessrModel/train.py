@@ -10,7 +10,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torchvision import transforms
 
-from geo_guessr_dataset import GPTGuessrDataset
+from geo_guessr_dataset import GeoGuessrDataset
 from gpt_guessr import GPTGuessr, GPTGuessrConfig
 
 from accelerate import Accelerator
@@ -20,20 +20,17 @@ from dataclasses import dataclass
 @dataclass
 class TrainingConfig:
     rgb = True
-    image_size = 512  # the generated image resolution
-    train_batch_size = 12
-    eval_batch_size = 12  # how many images to sample during evaluation
+    image_size = 224  # the generated image resolution
+    train_batch_size = 48
+    eval_batch_size = 48  # how many images to sample during evaluation
     num_dataloader_workers = 12  # how many subprocesses to use for data loading
-    epochs = 40
+    epochs = 60
     gradient_accumulation_steps = 1
     learning_rate = 1e-4
-    save_image_epochs = 5
-    save_model_epochs = 5
+    eval_epochs = 1
+    save_model_epochs = 2
     mixed_precision = 'fp16'  # `no` for float32, `fp16` for automatic mixed precision
-    output_dir = 'eg3d-latent-diffusion'
-    
-    eg3d_model_path = 'eg3d/eg3d_model/ffhqrebalanced512-128.pkl'
-    eg3d_latent_vector_size = 512
+    output_dir = 'GPTGuessr'
     
     data_dir = 'data/'
     df_file = 'dataset.df'
@@ -41,23 +38,26 @@ class TrainingConfig:
     overwrite_output_dir = True
     seed = 0
 
-def haversine_distance(p, t):
-    # Convert latitude and longitude to radians
-    p, t = torch.tensor([p, t], dtype=torch.float) * np.pi / 180
+def haversine_distance(coord1, coord2):
+    R = 6371.0 # Earth's radius in kilometers
+    # coord1, coord2 = coord1.clone().detach(), coord2.clone().detach()
+    lat1, lon1 = coord1[..., 0], coord1[..., 1]
+    lat2, lon2 = coord2[..., 0], coord2[..., 1]
+    phi1, phi2 = torch.deg2rad(lat1), torch.deg2rad(lat2)
+    delta_phi = torch.deg2rad(lat2 - lat1)
+    delta_lambda = torch.deg2rad(lon2 - lon1)
     
-    # Compute the haversine formula
-    a = torch.sin((t[:, 0]-p[:, 0])/2)**2 + torch.cos(p) * torch.cos(t) * torch.sin((t[:, 1]-p[:, 1])/2)**2
-    c = 2 * torch.arcsin(torch.sqrt(a))
-    
-    # Earth's radius (mean radius = 6,371km)
-    earth_radius = 6371
-    
-    return earth_radius * c
+    a = torch.sin(delta_phi / 2.0)**2 + \
+        torch.cos(phi1) * torch.cos(phi2) * \
+        torch.sin(delta_lambda / 2.0)**2
+    c = 2 * torch.atan2(torch.sqrt(a), torch.sqrt(1 - a))
+    distance = R * c
+    return distance
 
 
 def coord_loss_function(p, t):
     dist = haversine_distance(p, t)
-    return F.SmoothL1Loss(dist, torch.zeros_like(dist))
+    return F.smooth_l1_loss(dist, torch.zeros_like(dist))
 
 
 def train():    
@@ -71,9 +71,9 @@ def train():
             normalize,
         ])
 
-    dataset = GPTGuessrDataset(df_file=config.df_file, data_dir=config.data_dir, transform=preprocess)
+    dataset = GeoGuessrDataset(df_file=config.df_file, data_dir=config.data_dir, size=config.image_size, transform=preprocess)
 
-    train_size = int(len(dataset) * 0.1)
+    train_size = int(len(dataset) * 0.95)
     eval_size = len(dataset) - train_size
     train_dataset, eval_dataset = torch.utils.data.random_split(dataset, [train_size, eval_size], generator=torch.Generator().manual_seed(42))
 
@@ -84,25 +84,24 @@ def train():
     print(f"Training on {len(train_dataset)} images, evaluating on {len(eval_dataset)} images")
     
     ### TRAIN GPTGuessr ###
-    gpt_guessr_config = GPTGuessrConfig()
+    gpt_guessr_config = GPTGuessrConfig(num_channels=9)
     model = GPTGuessr(gpt_guessr_config)
     
     optimizer = torch.optim.AdamW(model.parameters(), lr=config.learning_rate)
-    country_loss_function = nn.CrossEntropy()
-    coord_loss_function = coord_loss_function
+    country_loss_function = nn.CrossEntropyLoss()
     
-    train_encoder_loop(config, model, optimizer, country_loss_function, coord_loss_function, train_dataloader, eval_dataloader)
+    train_encoder_loop(config, model, optimizer, country_loss_function, train_dataloader, eval_dataloader)
 
-def train_encoder_loop(config, model, optimizer, country_loss_function, coord_loss_function, train_dataloader, eval_dataloader):
+def train_encoder_loop(config, model, optimizer, country_loss_function, train_dataloader, eval_dataloader):
     # Initialize accelerator and tensorboard logging
     accelerator = Accelerator(
         mixed_precision=config.mixed_precision,
         gradient_accumulation_steps=config.gradient_accumulation_steps, 
         log_with="tensorboard",
-        logging_dir=os.path.join(config.output_dir, "logs")
+        project_dir=config.output_dir
     )
     if accelerator.is_main_process:
-        accelerator.init_trackers("eg3d_li_encoder")
+        accelerator.init_trackers("gptguessr")
 
     model, optimizer, train_dataloader, eval_dataloader = accelerator.prepare(
         model, optimizer, train_dataloader, eval_dataloader
@@ -110,12 +109,11 @@ def train_encoder_loop(config, model, optimizer, country_loss_function, coord_lo
 
     global_step = 0
     
-    for epoch in range(config.encoder_epochs):
+    for epoch in range(config.epochs):
         progress_bar = tqdm(total=len(train_dataloader), disable=not accelerator.is_local_main_process)
         progress_bar.set_description(f"Epoch {epoch}")
         
         model.train()
-        
         for step, batch in enumerate(train_dataloader):
             images = batch['images']
             country = batch['country']
@@ -133,7 +131,7 @@ def train_encoder_loop(config, model, optimizer, country_loss_function, coord_lo
                 optimizer.zero_grad()
                 
             progress_bar.update(1)
-            logs = {"train_coord_loss": loss.detach().item(), "train_country_loss": country_loss.detach().item(), "train_loss": loss.detach().item()}
+            logs = {"train/coord_loss": loss.detach().item(), "train/country_loss": country_loss.detach().item(), "train/loss": loss.detach().item()}
             progress_bar.set_postfix(**logs)
             accelerator.log(logs, step=global_step)
             global_step += 1
@@ -141,25 +139,25 @@ def train_encoder_loop(config, model, optimizer, country_loss_function, coord_lo
         # After each epoch you optionally sample some demo images with evaluate() and save the model
         if accelerator.is_main_process:
             model.eval()
-            if (epoch + 1) % config.save_image_epochs == 0 or epoch == config.encoder_epochs - 1:
+            if (epoch + 1) % config.eval_epochs == 0 or epoch == config.epochs - 1:
                 batch = next(iter(eval_dataloader))
                 images = batch['images']
                 country = batch['country']
                 coords = batch['coords']
                 pred_country, pred_coords = model(images)
-                eval_country_loss = country_loss_function(pred_country, country).detatch().item()
-                eval_coord_loss = coord_loss_function(pred_coords, coords).detatch().item()
-                dist = haversine_distance(pred_coords, coords)
-                logs = {"val_country_loss": eval_country_loss, "val_coord_loss": eval_coord_loss, "val_loss": eval_country_loss + eval_coord_loss, "val_dist": dist}
+                eval_country_loss = country_loss_function(pred_country, country).detach().item()
+                eval_coord_loss = coord_loss_function(pred_coords, coords).detach().item()
+                dist = torch.mean(haversine_distance(pred_coords, coords)).detach().item()
+                logs = {"val/country_loss": eval_country_loss, "val/coord_loss": eval_coord_loss, "val/loss": eval_country_loss + eval_coord_loss, "val/dist": dist}
                 accelerator.log(logs, step=global_step)
 
-            if (epoch + 1) % config.save_model_epochs == 0 or epoch == config.encoder_epochs - 1:
+            if (epoch + 1) % config.save_model_epochs == 0 or epoch == config.epochs - 1:
                 torch.save({
                     'epoch': epoch,
                     'model_state_dict': model.state_dict(),
                     'optimizer_state_dict': optimizer.state_dict(),
                     'loss': loss,
-                }, os.path.join(config.output_dir, f'encoder_{epoch + 1}.pth'))
+                }, os.path.join(config.output_dir, f'encoder_{epoch + 1:03}.pth'))
                 
 
 
