@@ -131,3 +131,4 @@ dmypy.json
 GPTGuessr/population/
 GPTGuessr/data/
 .DS_Store
+GPTGuessr/data.zip
