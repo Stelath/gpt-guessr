@@ -10,6 +10,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torchvision import transforms
 
+from transformers import ViTImageProcessor
 from geo_guessr_dataset import GeoGuessrDataset
 from gpt_guessr import GPTGuessr, GPTGuessrConfig
 
@@ -71,6 +72,7 @@ def train():
             normalize,
         ])
 
+    
     dataset = GeoGuessrDataset(df_file=config.df_file, data_dir=config.data_dir, size=config.image_size, transform=preprocess)
 
     train_size = int(len(dataset) * 0.95)
@@ -123,15 +125,16 @@ def train_encoder_loop(config, model, optimizer, country_loss_function, train_da
                 pred_country, pred_coords = model(images)
                 
                 country_loss = country_loss_function(pred_country, country)
-                coord_loss = coord_loss_function(pred_coords, coords)
-                loss = country_loss + coord_loss
+                coord_loss = F.smooth_l1_loss(pred_coords, coords) * 10
+                dist_loss = coord_loss_function(pred_coords, coords) / 1000
+                loss = country_loss + coord_loss + coord_loss
                 accelerator.backward(loss)
                 
                 optimizer.step()
                 optimizer.zero_grad()
                 
             progress_bar.update(1)
-            logs = {"train/coord_loss": loss.detach().item(), "train/country_loss": country_loss.detach().item(), "train/loss": loss.detach().item()}
+            logs = {"train/dist_loss": dist_loss.detach().item(), "train/coord_loss": coord_loss.detach().item(), "train/country_loss": country_loss.detach().item(), "train/loss": loss.detach().item()}
             progress_bar.set_postfix(**logs)
             accelerator.log(logs, step=global_step)
             global_step += 1
@@ -146,20 +149,15 @@ def train_encoder_loop(config, model, optimizer, country_loss_function, train_da
                 coords = batch['coords']
                 pred_country, pred_coords = model(images)
                 eval_country_loss = country_loss_function(pred_country, country).detach().item()
-                eval_coord_loss = coord_loss_function(pred_coords, coords).detach().item()
+                eval_coord_loss = F.smooth_l1_loss(pred_coords, coords) * 10
+                eval_dist_loss = coord_loss_function(pred_coords, coords).detach().item()
                 dist = torch.mean(haversine_distance(pred_coords, coords)).detach().item()
-                logs = {"val/country_loss": eval_country_loss, "val/coord_loss": eval_coord_loss, "val/loss": eval_country_loss + eval_coord_loss, "val/dist": dist}
+                logs = {"val/country_loss": eval_country_loss, "val/coord_loss": eval_coord_loss, "val/dist_loss": eval_dist_loss, "val/loss": eval_country_loss + eval_coord_loss, "val/dist": dist}
                 accelerator.log(logs, step=global_step)
 
             if (epoch + 1) % config.save_model_epochs == 0 or epoch == config.epochs - 1:
-                torch.save({
-                    'epoch': epoch,
-                    'model_state_dict': model.state_dict(),
-                    'optimizer_state_dict': optimizer.state_dict(),
-                    'loss': loss,
-                }, os.path.join(config.output_dir, f'encoder_{epoch + 1:03}.pth'))
+                model.module.save_pretrained(os.path.join(config.output_dir, f'guessr_{epoch + 1:03}.pth'))
                 
-
 
 if __name__ == "__main__":
     train()

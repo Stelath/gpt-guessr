@@ -52,8 +52,19 @@ class GPTGuessr(ViTPreTrainedModel):
         self.vit = ViTModel(config, add_pooling_layer=False)
 
         # Classifier head
-        self.country_classifier = nn.Linear(config.hidden_size, config.num_countries)
-        self.coordinates_classifier = nn.Linear(config.hidden_size + config.num_countries, 2)
+        self.country_classifier = nn.Sequential(
+            nn.Linear(config.hidden_size, 512),
+            nn.Linear(512, 256),
+            nn.Linear(256, config.num_countries),
+        )
+        self.coordinates_classifier = nn.Sequential(
+            nn.Linear(config.hidden_size + config.num_countries, 512),
+            nn.Linear(512, 1024),
+            nn.Linear(1024, 512),
+            nn.Linear(512, 256),
+            nn.Linear(256, 128),
+            nn.Linear(128, 2),
+        )
 
         # Initialize weights and apply final processing
         self.post_init()
