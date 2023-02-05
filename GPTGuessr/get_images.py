@@ -58,7 +58,10 @@ def main():
                 file.write(response.content)
             
         response = requests.get(metadata_url, params)
-        lat, lon = response.json()['location']['lat'], response.json()['location']['lng']
+        if response.json()['status'] != "ZERO_RESULTS":
+            lat, lon = response.json()['location']['lat'], response.json()['location']['lng']
+        else:
+            lat, lon = 0, 0
         # Save the coordinates to the output file
         csv_writer.writerow([f'street_view_{str(i).zfill(6)}', lat, lon])
 
