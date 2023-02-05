@@ -41,6 +41,25 @@ class TrainingConfig:
     overwrite_output_dir = True
     seed = 0
 
+def haversine_distance(p, t):
+    # Convert latitude and longitude to radians
+    p, t = torch.tensor([p, t], dtype=torch.float) * np.pi / 180
+    
+    # Compute the haversine formula
+    a = torch.sin((t[:, 0]-p[:, 0])/2)**2 + torch.cos(p) * torch.cos(t) * torch.sin((t[:, 1]-p[:, 1])/2)**2
+    c = 2 * torch.arcsin(torch.sqrt(a))
+    
+    # Earth's radius (mean radius = 6,371km)
+    earth_radius = 6371
+    
+    return earth_radius * c
+
+
+def coord_loss_function(p, t):
+    dist = haversine_distance(p, t)
+    return F.SmoothL1Loss(dist, torch.zeros_like(dist))
+
+
 def train():    
     config = TrainingConfig()
     
@@ -52,7 +71,7 @@ def train():
             normalize,
         ])
 
-    dataset = GPTGuessrDataset(df_file=config.df_file, data_dir=config.data_dir, transform=preprocess, encode=False)
+    dataset = GPTGuessrDataset(df_file=config.df_file, data_dir=config.data_dir, transform=preprocess)
 
     train_size = int(len(dataset) * 0.1)
     eval_size = len(dataset) - train_size
@@ -66,15 +85,15 @@ def train():
     
     ### TRAIN GPTGuessr ###
     gpt_guessr_config = GPTGuessrConfig()
-    encoder = GPTGuessr(gpt_guessr_config)
+    model = GPTGuessr(gpt_guessr_config)
     
-    encoder_optimizer = torch.optim.AdamW(encoder.parameters(), lr=config.learning_rate)
-    vector_loss_function = nn.L1Loss(reduction='mean')
-    eg3d_loss_function = EG3DLoss(model=eg3d, image_size=config.image_size)
+    optimizer = torch.optim.AdamW(model.parameters(), lr=config.learning_rate)
+    country_loss_function = nn.CrossEntropy()
+    coord_loss_function = coord_loss_function
     
-    train_encoder_loop(config, encoder, encoder_optimizer, vector_loss_function, eg3d_loss_function, train_dataloader, eval_dataset)
+    train_encoder_loop(config, model, optimizer, country_loss_function, coord_loss_function, train_dataloader, eval_dataloader)
 
-def train_encoder_loop(config, model, optimizer, vector_loss_function, eg3d_loss_function, train_dataloader, eval_dataset):
+def train_encoder_loop(config, model, optimizer, country_loss_function, coord_loss_function, train_dataloader, eval_dataloader):
     # Initialize accelerator and tensorboard logging
     accelerator = Accelerator(
         mixed_precision=config.mixed_precision,
@@ -85,8 +104,8 @@ def train_encoder_loop(config, model, optimizer, vector_loss_function, eg3d_loss
     if accelerator.is_main_process:
         accelerator.init_trackers("eg3d_li_encoder")
 
-    model, optimizer, train_dataloader = accelerator.prepare(
-        model, optimizer, train_dataloader
+    model, optimizer, train_dataloader, eval_dataloader = accelerator.prepare(
+        model, optimizer, train_dataloader, eval_dataloader
     )
 
     global_step = 0
@@ -99,20 +118,22 @@ def train_encoder_loop(config, model, optimizer, vector_loss_function, eg3d_loss
         
         for step, batch in enumerate(train_dataloader):
             images = batch['images']
-            latent_vectors = batch['latent_vectors']
+            country = batch['country']
+            coords = batch['coords']
             
             with accelerator.accumulate(model):
-                latent_vectors_pred = model(images)
+                pred_country, pred_coords = model(images)
                 
-                loss = vector_loss_function(latent_vectors_pred, latent_vectors) + eg3d_loss_function(latent_vectors_pred, images)
+                country_loss = country_loss_function(pred_country, country)
+                coord_loss = coord_loss_function(pred_coords, coords)
+                loss = country_loss + coord_loss
                 accelerator.backward(loss)
                 
                 optimizer.step()
-                # lr_scheduler.step()
                 optimizer.zero_grad()
                 
             progress_bar.update(1)
-            logs = {"train_loss": loss.detach().item()}
+            logs = {"train_coord_loss": loss.detach().item(), "train_country_loss": country_loss.detach().item(), "train_loss": loss.detach().item()}
             progress_bar.set_postfix(**logs)
             accelerator.log(logs, step=global_step)
             global_step += 1
@@ -121,8 +142,15 @@ def train_encoder_loop(config, model, optimizer, vector_loss_function, eg3d_loss
         if accelerator.is_main_process:
             model.eval()
             if (epoch + 1) % config.save_image_epochs == 0 or epoch == config.encoder_epochs - 1:
-                eval_loss = evaluate_encoder(config, epoch, model, eg3d_loss_function.get_eg3d(), vector_loss_function, eval_dataset)
-                logs = {"eval_loss": eval_loss}
+                batch = next(iter(eval_dataloader))
+                images = batch['images']
+                country = batch['country']
+                coords = batch['coords']
+                pred_country, pred_coords = model(images)
+                eval_country_loss = country_loss_function(pred_country, country).detatch().item()
+                eval_coord_loss = coord_loss_function(pred_coords, coords).detatch().item()
+                dist = haversine_distance(pred_coords, coords)
+                logs = {"val_country_loss": eval_country_loss, "val_coord_loss": eval_coord_loss, "val_loss": eval_country_loss + eval_coord_loss, "val_dist": dist}
                 accelerator.log(logs, step=global_step)
 
             if (epoch + 1) % config.save_model_epochs == 0 or epoch == config.encoder_epochs - 1:
@@ -131,7 +159,7 @@ def train_encoder_loop(config, model, optimizer, vector_loss_function, eg3d_loss
                     'model_state_dict': model.state_dict(),
                     'optimizer_state_dict': optimizer.state_dict(),
                     'loss': loss,
-                }, os.path.join(config.output_dir, f'encoder_{epoch}.pth'))
+                }, os.path.join(config.output_dir, f'encoder_{epoch + 1}.pth'))
                 
 
 
