@@ -1,4 +1,5 @@
 import os
+import numpy as np
 from PIL import Image
 
 import torch
@@ -20,6 +21,8 @@ model = GPTGuessr(model_config)
 model.load_state_dict(torch.load("guessr_034.pth/pytorch_model.bin", map_location=torch.device('cpu')))
 model.eval()
 
+countries = np.load("countries.npy", allow_pickle=True)
+
 def get_coords():
     items = []
     for i in range(0, 3):
@@ -36,5 +39,6 @@ def get_coords():
     pred_coords = pred_coords.detach().numpy()[0]
     pred_coords = [str(pred_coords[0]), str(pred_coords[1])]
     
+    print(countries[torch.argmax(pred_country)])
     return pred_coords
     
