@@ -1,13 +1,10 @@
-import requests
-from tqdm import tqdm
 import os
+import csv
 import json
-from random import randint
 import argparse
+import requests
 import numpy as np
-from csv import writer
-import geopandas as gpd
-import pandas as pd
+from tqdm import tqdm
 # Consider using https://osmnx.readthedocs.io/en/stable/osmnx.html#osmnx.utils_geo.sample_points for street gps coords
 # Stack Overflow on how to get the coordinates: https://stackoverflow.com/questions/68367074/how-to-generate-random-lat-long-points-within-geographical-boundaries
 
@@ -29,17 +26,17 @@ def main():
     # Open and create all the necessary files & folders
     os.makedirs(args.output, exist_ok=True)
     
-    points = pd.read_pickle(args.points)
-    coords = points.geometry
+    with open(args.points, newline='') as points_file:
+        coords = list(csv.reader(points_file))
     
     print(f"Downloading off {len(coords)} points")
     
-    coord_output_file = open(os.path.join(args.output, 'picture_coords.csv'), 'w', newline='')
-    csv_writer = writer(coord_output_file)
+    coord_output_file = open(os.path.join(args.output, 'picture_coords.csv'), 'a', newline='')
+    csv_writer = csv.writer(coord_output_file)
     
     for i in tqdm(range(args.start_count//3, (args.icount + args.start_count)//3)):
         # Set the parameters for the API call to Google Street View
-        lat, lon = coords[i].y + np.random.randint(10) / 1000, coords[i].x + np.random.randint(10) / 1000
+        lat, lon = coords[i][0], coords[i][1]
         for j in range(3):
             params = {
                 'key': args.key,
@@ -48,7 +45,7 @@ def main():
                 'heading': str(j * 120),
                 'pitch': '20',
                 'fov': '90',
-                'radius': 10000000
+                'radius': 50
             }
             
             response = requests.get(url, params)
@@ -60,10 +57,10 @@ def main():
         response = requests.get(metadata_url, params)
         if response.json()['status'] == "OK":
             lat, lon = response.json()['location']['lat'], response.json()['location']['lng']
+            # Save the coordinates to the output file
+            csv_writer.writerow([f'street_view_{str(i).zfill(6)}', lat, lon])
         else:
             lat, lon = 0, 0
-        # Save the coordinates to the output file
-        csv_writer.writerow([f'street_view_{str(i).zfill(6)}', lat, lon])
 
     coord_output_file.close()
 

@@ -23,8 +23,9 @@ class GeoGuessrDataset(Dataset):
         items = []
         df_item = self.df.iloc[idx]
         file_path = df_item['file_name']
-        country = df_item['country']
-        coords = df_item['coords']
+        state = df_item['state']
+        lat = df_item['lat']
+        lon = df_item['lon']
         for i in range(0, 3):
             data_path = os.path.join(self.data_dir, f'{file_path}_{i}.jpg')
             try:
@@ -38,7 +39,7 @@ class GeoGuessrDataset(Dataset):
                 items[i] = self.transform(item)
         
         items = torch.cat((items[0], items[1], items[2]), dim=0)
-        item = {'images': items, 'country': F.one_hot(torch.tensor(country).long(), num_classes=177).type(torch.float32), 'coords': torch.tensor(coords, dtype=torch.float32)}
+        item = {'images': items, 'state': F.one_hot(torch.tensor(state).long(), num_classes=50).type(torch.float32), 'coords': torch.tensor([lat, lon], dtype=torch.float32)}
         
         return item
     
