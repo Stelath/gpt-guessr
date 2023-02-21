@@ -1,6 +1,5 @@
 import os
 import csv
-import json
 import argparse
 import requests
 import numpy as np
@@ -41,7 +40,7 @@ def main():
             params = {
                 'key': args.key,
                 'size': '640x640',
-                'location': f'{lat:.3f},{lon:.3f}',
+                'location': f'{lat},{lon}',
                 'heading': str(j * 120),
                 'pitch': '20',
                 'fov': '90',
