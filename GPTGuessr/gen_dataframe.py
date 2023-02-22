@@ -6,8 +6,8 @@ from tqdm.auto import tqdm
 
 def get_args():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--dataset", help="The latitude and longitude points of the dataset (csv file)", required=True, type=str)
-    parser.add_argument("--output", help="The output folder where the dataframe will be stored, (defaults to: data/)", default='data/', type=str)
+    parser.add_argument("--dataset", help="The dataset folder (with CSV file titled picture_coords.csv)", required=True, type=str)
+    # parser.add_argument("--workers", help="The number of workers to process the dataset (defaults to 4)", default=4, type=int)
     return parser.parse_args()
 
 def city_state_country(row, geolocator, pbar):
@@ -25,14 +25,13 @@ def city_state_country(row, geolocator, pbar):
 
 def main():
     args = get_args()
-    df = pd.read_csv(args.dataset, header=None, names=['lat', 'lon'])
+    df = pd.read_csv(os.path.join(args.dataset, 'picture_coords.csv'), header=None, names=['lat', 'lon'])
     
     geolocator = Nominatim(user_agent="geoapiExercises")
     pbar = tqdm(total=len(df))
-    
     df = df.apply(city_state_country, args=(geolocator, pbar), axis=1)
     
-    df.to_pickle(os.path.join(args.out, 'dataset.df'), index=False)
+    df.to_pickle(os.path.join(args.dataset, 'dataset.df'))
 
 if __name__ == '__main__':
     main()

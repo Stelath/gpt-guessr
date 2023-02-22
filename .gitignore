@@ -154,5 +154,6 @@ cython_debug/
 
 GPTGuessr/data
 .DS_Store
+*.csv
 *.tif
 *.zip

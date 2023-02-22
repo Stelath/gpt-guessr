@@ -1,0 +1,11 @@
+#PBS -N Augment_Data
+#PBS -l select=1:ncpus=8:mem=20gb:interconnect=25ge,walltime=2:00:00
+
+eval "$(micromamba shell hook --shell=bash)"
+micromamba activate eg3d
+
+cd /home/korte/projects/gpt-guessr/GPTGuessr/
+
+python gen_dataframe.py --dataset data/
+
+echo Done!

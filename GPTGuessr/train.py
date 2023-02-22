@@ -21,9 +21,9 @@ from dataclasses import dataclass
 @dataclass
 class TrainingConfig:
     rgb = True
-    image_size = 224  # the generated image resolution
-    train_batch_size = 48
-    eval_batch_size = 48  # how many images to sample during evaluation
+    image_size = 512  # the generated image resolution
+    train_batch_size = 32
+    eval_batch_size = 32  # how many images to sample during evaluation
     num_dataloader_workers = 12  # how many subprocesses to use for data loading
     epochs = 60
     gradient_accumulation_steps = 1
@@ -86,7 +86,7 @@ def train():
     print(f"Training on {len(train_dataset)} images, evaluating on {len(eval_dataset)} images")
     
     ### TRAIN GPTGuessr ###
-    gpt_guessr_config = GPTGuessrConfig(num_channels=9)
+    gpt_guessr_config = GPTGuessrConfig(num_channels=9, image_size=512)
     model = GPTGuessr(gpt_guessr_config)
     
     optimizer = torch.optim.AdamW(model.parameters(), lr=config.learning_rate)
@@ -125,16 +125,15 @@ def train_encoder_loop(config, model, optimizer, country_loss_function, train_da
                 pred_country, pred_coords = model(images)
                 
                 country_loss = country_loss_function(pred_country, country)
-                coord_loss = F.smooth_l1_loss(pred_coords, coords) * 10
                 dist_loss = coord_loss_function(pred_coords, coords) / 1000
-                loss = country_loss + coord_loss + coord_loss
+                loss = country_loss + dist_loss
                 accelerator.backward(loss)
                 
                 optimizer.step()
                 optimizer.zero_grad()
                 
             progress_bar.update(1)
-            logs = {"train/dist_loss": dist_loss.detach().item(), "train/coord_loss": coord_loss.detach().item(), "train/country_loss": country_loss.detach().item(), "train/loss": loss.detach().item()}
+            logs = {"train/dist_loss": dist_loss.detach().item(), "train/country_loss": country_loss.detach().item(), "train/loss": loss.detach().item()}
             progress_bar.set_postfix(**logs)
             accelerator.log(logs, step=global_step)
             global_step += 1
@@ -148,11 +147,12 @@ def train_encoder_loop(config, model, optimizer, country_loss_function, train_da
                 country = batch['country']
                 coords = batch['coords']
                 pred_country, pred_coords = model(images)
+                
                 eval_country_loss = country_loss_function(pred_country, country).detach().item()
-                eval_coord_loss = F.smooth_l1_loss(pred_coords, coords) * 10
                 eval_dist_loss = coord_loss_function(pred_coords, coords).detach().item()
                 dist = torch.mean(haversine_distance(pred_coords, coords)).detach().item()
-                logs = {"val/country_loss": eval_country_loss, "val/coord_loss": eval_coord_loss, "val/dist_loss": eval_dist_loss, "val/loss": eval_country_loss + eval_coord_loss, "val/dist": dist}
+                
+                logs = {"val/country_loss": eval_country_loss, "val/dist_loss": eval_dist_loss, "val/loss": eval_country_loss + eval_coord_loss, "val/dist": dist}
                 accelerator.log(logs, step=global_step)
 
             if (epoch + 1) % config.save_model_epochs == 0 or epoch == config.epochs - 1:
