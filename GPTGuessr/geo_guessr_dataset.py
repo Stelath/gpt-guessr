@@ -15,6 +15,13 @@ class GeoGuessrDataset(Dataset):
         self.df = self.df.reset_index()
         self.transform = transform
         self.size = size
+        
+        self.state_keys = {}
+        i = 0
+        for state in sorted(self.df['state']):
+            if state not in self.state_keys:
+                self.state_keys[state] = i
+                i += 1
 
     def __len__(self):
         return len(self.df)
@@ -22,8 +29,8 @@ class GeoGuessrDataset(Dataset):
     def __getitem__(self, idx):
         items = []
         df_item = self.df.iloc[idx]
-        file_path = df_item['file_name']
-        state = df_item['state']
+        file_path = df_item.name
+        state = self.state_keys[df_item['state']]
         lat = df_item['lat']
         lon = df_item['lon']
         for i in range(0, 3):

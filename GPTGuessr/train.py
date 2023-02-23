@@ -12,7 +12,7 @@ from torchvision import transforms
 
 from transformers import ViTImageProcessor
 from geo_guessr_dataset import GeoGuessrDataset
-from gpt_guessr import GPTGuessr, GPTGuessrConfig
+from gpt_guessr import GPTGuessrViT, GPTGuessrConfig, GPTGuessrConvNeXt
 
 from accelerate import Accelerator
 
@@ -31,7 +31,7 @@ class TrainingConfig:
     eval_epochs = 1
     save_model_epochs = 2
     mixed_precision = 'fp16'  # `no` for float32, `fp16` for automatic mixed precision
-    output_dir = 'GPTGuessr'
+    output_dir = '/scratch1/korte/GPTGuessr'
     
     data_dir = 'data/'
     df_file = 'dataset.df'
@@ -83,18 +83,19 @@ def train():
     eval_dataloader = torch.utils.data.DataLoader(eval_dataset, batch_size=config.eval_batch_size, shuffle=True, num_workers=config.num_dataloader_workers)
     
     print(f"Loaded Dataloaders")
-    print(f"Training on {len(train_dataset)} images, evaluating on {len(eval_dataset)} images")
+    print(f"Training on {len(train_dataset)} locations, evaluating on {len(eval_dataset)} locations")
     
     ### TRAIN GPTGuessr ###
-    gpt_guessr_config = GPTGuessrConfig(num_channels=9, image_size=512)
-    model = GPTGuessr(gpt_guessr_config)
+    # gpt_guessr_config = GPTGuessrConfig(num_channels=9, image_size=config.image_size, num_countries=50)
+    # model = GPTGuessrViT(gpt_guessr_config)
+    model = GPTGuessrConvNeXt(num_countries=50)
     
     optimizer = torch.optim.AdamW(model.parameters(), lr=config.learning_rate)
-    country_loss_function = nn.CrossEntropyLoss()
+    state_loss_function = nn.CrossEntropyLoss()
     
-    train_encoder_loop(config, model, optimizer, country_loss_function, train_dataloader, eval_dataloader)
+    train_encoder_loop(config, model, optimizer, state_loss_function, train_dataloader, eval_dataloader)
 
-def train_encoder_loop(config, model, optimizer, country_loss_function, train_dataloader, eval_dataloader):
+def train_encoder_loop(config, model, optimizer, state_loss_function, train_dataloader, eval_dataloader):
     # Initialize accelerator and tensorboard logging
     accelerator = Accelerator(
         mixed_precision=config.mixed_precision,
@@ -118,22 +119,22 @@ def train_encoder_loop(config, model, optimizer, country_loss_function, train_da
         model.train()
         for step, batch in enumerate(train_dataloader):
             images = batch['images']
-            country = batch['country']
+            state = batch['state']
             coords = batch['coords']
             
             with accelerator.accumulate(model):
-                pred_country, pred_coords = model(images)
+                pred_state, pred_coords = model(images)
                 
-                country_loss = country_loss_function(pred_country, country)
-                dist_loss = coord_loss_function(pred_coords, coords) / 1000
-                loss = country_loss + dist_loss
+                state_loss = state_loss_function(pred_state, state)
+                dist_loss = coord_loss_function(pred_coords, coords) / 10000
+                loss = state_loss + dist_loss
                 accelerator.backward(loss)
                 
                 optimizer.step()
                 optimizer.zero_grad()
                 
             progress_bar.update(1)
-            logs = {"train/dist_loss": dist_loss.detach().item(), "train/country_loss": country_loss.detach().item(), "train/loss": loss.detach().item()}
+            logs = {"train/dist_loss": dist_loss.detach().item(), "train/state_loss": state_loss.detach().item(), "train/loss": loss.detach().item()}
             progress_bar.set_postfix(**logs)
             accelerator.log(logs, step=global_step)
             global_step += 1
@@ -144,20 +145,26 @@ def train_encoder_loop(config, model, optimizer, country_loss_function, train_da
             if (epoch + 1) % config.eval_epochs == 0 or epoch == config.epochs - 1:
                 batch = next(iter(eval_dataloader))
                 images = batch['images']
-                country = batch['country']
+                state = batch['state']
                 coords = batch['coords']
-                pred_country, pred_coords = model(images)
+                pred_state, pred_coords = model(images)
                 
-                eval_country_loss = country_loss_function(pred_country, country).detach().item()
+                eval_state_loss = state_loss_function(pred_state, state).detach().item()
                 eval_dist_loss = coord_loss_function(pred_coords, coords).detach().item()
                 dist = torch.mean(haversine_distance(pred_coords, coords)).detach().item()
                 
-                logs = {"val/country_loss": eval_country_loss, "val/dist_loss": eval_dist_loss, "val/loss": eval_country_loss + eval_coord_loss, "val/dist": dist}
+                logs = {"val/state_loss": eval_state_loss, "val/dist_loss": eval_dist_loss, "val/loss": eval_state_loss + eval_dist_loss, "val/dist": dist}
                 accelerator.log(logs, step=global_step)
 
             if (epoch + 1) % config.save_model_epochs == 0 or epoch == config.epochs - 1:
-                model.module.save_pretrained(os.path.join(config.output_dir, f'guessr_{epoch + 1:03}.pth'))
-                
+                # accelerator.unwrap_model(model).save_pretrained(os.path.join(config.output_dir, f'guessr_{epoch + 1:03}.pth'))
+                torch.save({
+                    'epoch': epoch,
+                    'model_state_dict': accelerator.unwrap_model(model).state_dict(),
+                    'optimizer_state_dict': optimizer.state_dict(),
+                    'loss': loss,
+                }, os.path.join(config.output_dir, f'guessr_{epoch + 1:03}.pth'))
+            
 
 if __name__ == "__main__":
     train()
