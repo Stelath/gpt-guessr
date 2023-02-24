@@ -5,7 +5,7 @@ from PIL import Image
 import torch
 from torchvision import transforms
 
-from gpt_guessr import GPTGuessr, GPTGuessrConfig
+from gpt_guessr import GPTGuessrConvNeXt
 
 normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406],
                                     std=[0.229, 0.224, 0.225])
@@ -15,10 +15,9 @@ preprocess = transforms.Compose([
         normalize,
     ])
 
-model_config = GPTGuessrConfig(num_channels=9)
-model = GPTGuessr(model_config)
+model = GPTGuessrConvNeXt(num_channels=9, num_countries=50)
 # print(torch.load("guessr_006.pth/pytorch_model.bin", map_location=torch.device('cpu')).keys())
-model.load_state_dict(torch.load("guessr_034.pth/pytorch_model.bin", map_location=torch.device('cpu')))
+model.load_state_dict(torch.load("guessr_058.pth", map_location=torch.device('cpu'))['model_state_dict'])
 model.eval()
 
 countries = np.load("countries.npy", allow_pickle=True)

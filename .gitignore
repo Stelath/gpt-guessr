@@ -158,3 +158,4 @@ GPTGuessr/data
 *.csv
 *.tif
 *.zip
+*.pth
