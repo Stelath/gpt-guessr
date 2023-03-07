@@ -126,7 +126,7 @@ def train_encoder_loop(config, model, optimizer, state_loss_function, train_data
                 pred_state, pred_coords = model(images)
                 
                 state_loss = state_loss_function(pred_state, state)
-                dist_loss = coord_loss_function(pred_coords, coords) / 10000
+                dist_loss = coord_loss_function(pred_coords, coords) / 5000
                 loss = state_loss + dist_loss
                 accelerator.backward(loss)
                 
