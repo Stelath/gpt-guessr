@@ -34,7 +34,6 @@ class TrainingConfig:
     output_dir = '/scratch1/korte/GPTGuessr'
     
     data_dir = 'data/'
-    df_file = 'dataset.df'
 
     overwrite_output_dir = True
     seed = 0
@@ -73,7 +72,7 @@ def train():
         ])
 
     
-    dataset = GeoGuessrDataset(df_file=config.df_file, data_dir=config.data_dir, size=config.image_size, transform=preprocess)
+    dataset = GeoGuessrDataset(data_dir=config.data_dir, size=config.image_size, transform=preprocess)
 
     train_size = int(len(dataset) * 0.95)
     eval_size = len(dataset) - train_size
