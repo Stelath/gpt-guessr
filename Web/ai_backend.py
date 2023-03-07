@@ -25,7 +25,7 @@ countries = np.load("countries.npy", allow_pickle=True)
 def get_coords():
     items = []
     for i in range(0, 3):
-        data_path = f'Image{i + 1}.png'
+        data_path = f'Image{i + 1}.jpg'
         img = Image.open(data_path)
         items.append(img.convert("RGB"))
     
@@ -34,9 +34,10 @@ def get_coords():
     
     items = torch.cat((items[0], items[1], items[2]), dim=0).unsqueeze(0)
     
-    pred_country, pred_coords = model(items)
-    pred_coords = pred_coords.detach().numpy()[0]
-    pred_coords = [str(pred_coords[0]), str(pred_coords[1])]
+    with torch.no_grad():
+        pred_country, pred_coords = model(items)
+        pred_coords = pred_coords.detach().numpy()[0]
+        pred_coords = [str(pred_coords[0]), str(pred_coords[1])]
     
     print(countries[torch.argmax(pred_country)])
     return pred_coords

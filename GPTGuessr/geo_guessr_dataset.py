@@ -8,8 +8,8 @@ from PIL import Image
 import pandas as pd
 
 class GeoGuessrDataset(Dataset):
-    def __init__(self, df_file, data_dir, size=244, transform=None):
-        self.df = pd.read_pickle(os.path.join(data_dir, df_file))
+    def __init__(self, data_dir, size=244, transform=None):
+        self.df = pd.read_pickle(os.path.join(data_dir, 'dataset.df'))
         self.data_dir = data_dir
         self.df.dropna(inplace=True)
         self.df = self.df.reset_index()
@@ -29,7 +29,7 @@ class GeoGuessrDataset(Dataset):
     def __getitem__(self, idx):
         items = []
         df_item = self.df.iloc[idx]
-        file_path = df_item.name
+        file_path = df_item['index']
         state = self.state_keys[df_item['state']]
         lat = df_item['lat']
         lon = df_item['lon']
@@ -39,6 +39,7 @@ class GeoGuessrDataset(Dataset):
                 img = Image.open(data_path)
             except:
                 img = Image.new('RGB', (self.size, self.size))
+                print(f"Image not found: {data_path}")
             items.append(img.convert("RGB"))
         
         if self.transform:
