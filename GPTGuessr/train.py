@@ -150,13 +150,18 @@ def train_encoder_loop(config, model, optimizer, state_loss_function, train_data
                 images = batch['images']
                 state = batch['state']
                 coords = batch['coords']
-                pred_state, pred_coords = model(images)
+
+                with torch.no_grad():
+                    pred_state, pred_coords = model(images)
                 
                 eval_state_loss = state_loss_function(pred_state, state).detach().item()
-                eval_dist_loss = coord_loss_function(pred_coords, coords).detach().item()
-                dist = torch.mean(haversine_distance(pred_coords, coords)).detach().item()
+                eval_dist_loss = coord_loss_function(pred_coords, coords).detach().item()/5000
+                dist = haversine_distance(pred_coords, coords).detach()
+
+                mean_dist = torch.mean(dist).item()
+                median_dist = torch.median(dist).item()
                 
-                logs = {"val/state_loss": eval_state_loss, "val/dist_loss": eval_dist_loss, "val/loss": eval_state_loss + eval_dist_loss, "val/dist": dist}
+                logs = {"val/state_loss": eval_state_loss, "val/dist_loss": eval_dist_loss, "val/loss": eval_state_loss + eval_dist_loss, "val/mean_dist": mean_dist, "val/median_dist": median_dist}
                 accelerator.log(logs, step=global_step)
 
             if (epoch + 1) % config.save_model_epochs == 0 or epoch == config.epochs - 1:
