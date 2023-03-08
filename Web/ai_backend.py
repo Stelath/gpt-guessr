@@ -10,14 +10,14 @@ from gpt_guessr import GPTGuessrConvNeXt
 normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406],
                                     std=[0.229, 0.224, 0.225])
 preprocess = transforms.Compose([
-        transforms.Resize(224),
+        transforms.Resize(512),
         transforms.ToTensor(),
         normalize,
     ])
 
 model = GPTGuessrConvNeXt(num_channels=9, num_countries=50)
 # print(torch.load("guessr_006.pth/pytorch_model.bin", map_location=torch.device('cpu')).keys())
-model.load_state_dict(torch.load("guessr_058.pth", map_location=torch.device('cpu'))['model_state_dict'])
+model.load_state_dict(torch.load("guessr_030.pth", map_location=torch.device('cpu'))['model_state_dict'])
 model.eval()
 
 countries = np.load("countries.npy", allow_pickle=True)
@@ -25,7 +25,7 @@ countries = np.load("countries.npy", allow_pickle=True)
 def get_coords():
     items = []
     for i in range(0, 3):
-        data_path = f'Image{i + 1}.jpg'
+        data_path = f'Image{i + 1}.png'
         img = Image.open(data_path)
         items.append(img.convert("RGB"))
     

@@ -126,6 +126,10 @@ def train_encoder_loop(config, model, optimizer, state_loss_function, train_data
                 
                 state_loss = state_loss_function(pred_state, state)
                 dist_loss = coord_loss_function(pred_coords, coords) / 5000
+                
+                if 15 > epoch:
+                    dist_loss = dist_loss * 0
+                
                 loss = state_loss + dist_loss
                 accelerator.backward(loss)
                 
