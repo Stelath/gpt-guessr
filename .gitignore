@@ -159,3 +159,4 @@ GPTGuessr/data
 *.tif
 *.zip
 *.pth
+.DS_Store
