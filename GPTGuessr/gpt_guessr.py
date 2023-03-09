@@ -141,6 +141,7 @@ class GPTGuessrConvNeXt(nn.Module):
             Permute([0, 3, 1, 2]),
             Condenser(256),
             nn.Linear(256, self.num_countries),
+            nn.Softmax(dim=1),
         )
         self.coordinates_classifier = nn.Sequential(
             Permute([0, 2, 3, 1]),
