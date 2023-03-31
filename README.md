@@ -1,4 +1,5 @@
-# gpt-guessr
+# COMING SOON
+# GPT-Guessr
 GPTGuessr is a GeoGuessr AI
 
 Made for CU HackIt 2023
