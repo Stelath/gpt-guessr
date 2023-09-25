@@ -1,4 +1,7 @@
-# ~~COMING SOON~~ Project has been put on hold as Stanford Grad Students have recently released a model called PIGEON which significantly outperforms ours, I suggest you check it out [here](https://twitter.com/lkshaas/status/1657422053031411713), while they haven't released the model yet I expect them to soon, I may revisit this project but for now its closed =(
+# ~~COMING SOON~~
+
+## Project has been put on hold as Stanford Grad Students have recently released a model called PIGEON which significantly outperforms ours, I suggest you check it out [here](https://huggingface.co/geolocal/StreetCLIP), I may revisit this project but for now its closed =(
+
 # GPT-Guessr
 GPTGuessr is a GeoGuessr AI
 
